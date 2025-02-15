@@ -287,8 +287,8 @@ public class Response implements Closeable {
             } catch (NumberFormatException ex) {
                 NanoHTTPD.LOG.severe("content-length was no number " + contentLengthString);
             }
-        }else{
-        	pw.print("Content-Length: " + size + "\r\n");
+        } else {
+            pw.print("Content-Length: " + size + "\r\n");
         }
         return size;
     }
@@ -300,7 +300,7 @@ public class Response implements Closeable {
             try {
                 chunkedOutputStream.finish();
             } catch (Exception e) {
-                if(this.data != null) {
+                if (this.data != null) {
                     this.data.close();
                 }
             }
@@ -315,7 +315,7 @@ public class Response implements Closeable {
             try {
                 gzipOutputStream = new GZIPOutputStream(outputStream);
             } catch (Exception e) {
-                if(this.data != null) {
+                if (this.data != null) {
                     this.data.close();
                 }
             }
@@ -354,7 +354,7 @@ public class Response implements Closeable {
             try {
                 outputStream.write(buff, 0, read);
             } catch (Exception e) {
-                if(this.data != null) {
+                if (this.data != null) {
                     this.data.close();
                 }
             }
@@ -440,9 +440,12 @@ public class Response implements Closeable {
     // If a Gzip usage has been enforced, use it.
     // Else decide whether or not to use Gzip.
     public boolean useGzipWhenAccepted() {
-        if (gzipUsage == GzipUsage.DEFAULT)
-            return getMimeType() != null && (getMimeType().toLowerCase().contains("text/") || getMimeType().toLowerCase().contains("/json"));
-        else
-            return gzipUsage == GzipUsage.ALWAYS;
+        return false;
+        // if (gzipUsage == GzipUsage.DEFAULT)
+        // return getMimeType() != null &&
+        // (getMimeType().toLowerCase().contains("text/") ||
+        // getMimeType().toLowerCase().contains("/json"));
+        // else
+        // return gzipUsage == GzipUsage.ALWAYS;
     }
 }

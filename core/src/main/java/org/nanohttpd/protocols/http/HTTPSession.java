@@ -422,14 +422,21 @@ public class HTTPSession implements IHTTPSession {
             if (r == null) {
                 throw new ResponseException(Status.INTERNAL_ERROR, "SERVER INTERNAL ERROR: Serve() returned a null response.");
             } else {
-                String acceptEncoding = this.headers.get("accept-encoding");
-                this.cookies.unloadQueue(r);
-                r.setRequestMethod(this.method);
-                if (acceptEncoding == null || !acceptEncoding.contains("gzip")) {
-                    r.setUseGzip(false);
+                String expecString = this.headers.get("expect");
+                if (expecString != null && "100-continue".equalsIgnoreCase(expecString)) {
+                    this.outputStream.write("HTTP/1.1 100 Continue\r\n".getBytes());
+                    System.out.println("Sent 100 Continue response.");
+                    this.outputStream.flush();
+                } else {
+                    String acceptEncoding = this.headers.get("accept-encoding");
+                    this.cookies.unloadQueue(r);
+                    r.setRequestMethod(this.method);
+                    if (acceptEncoding == null || !acceptEncoding.contains("gzip")) {
+                        r.setUseGzip(false);
+                    }
+                    r.setKeepAlive(keepAlive);
+                    r.send(this.outputStream);
                 }
-                r.setKeepAlive(keepAlive);
-                r.send(this.outputStream);
             }
             if (!keepAlive || r.isCloseConnection()) {
                 throw new SocketException("NanoHttpd Shutdown");
