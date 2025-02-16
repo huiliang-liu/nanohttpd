@@ -111,6 +111,8 @@ public class HTTPSession implements IHTTPSession {
 
     private String protocolVersion;
 
+    private boolean onContinue = false;
+
     public HTTPSession(NanoHTTPD httpd, ITempFileManager tempFileManager, InputStream inputStream, OutputStream outputStream) {
         this.httpd = httpd;
         this.tempFileManager = tempFileManager;
@@ -140,12 +142,14 @@ public class HTTPSession implements IHTTPSession {
 
             StringTokenizer st = new StringTokenizer(inLine);
             if (!st.hasMoreTokens()) {
+                System.err.println("BAD REQUEST: Syntax error. Usage: GET /example/file.html");
                 throw new ResponseException(Status.BAD_REQUEST, "BAD REQUEST: Syntax error. Usage: GET /example/file.html");
             }
 
             pre.put("method", st.nextToken());
 
             if (!st.hasMoreTokens()) {
+                System.err.println("BAD REQUEST: Missing URI. Usage: GET /example/file.html");
                 throw new ResponseException(Status.BAD_REQUEST, "BAD REQUEST: Missing URI. Usage: GET /example/file.html");
             }
 
@@ -363,7 +367,8 @@ public class HTTPSession implements IHTTPSession {
                 // socket was been closed
                 NanoHTTPD.safeClose(this.inputStream);
                 NanoHTTPD.safeClose(this.outputStream);
-                throw new SocketException("NanoHttpd Shutdown");
+                // throw new SocketException("NanoHttpd Shutdown");
+                return;
             }
             while (read > 0) {
                 this.rlen += read;
@@ -373,7 +378,11 @@ public class HTTPSession implements IHTTPSession {
                 }
                 read = this.inputStream.read(buf, this.rlen, HTTPSession.BUFSIZE - this.rlen);
             }
+            if (onContinue) {
+                this.splitbyte = 0;
+            }
 
+            System.out.println("HTTPSession.execute() - splitbyte: " + this.splitbyte + ", rlen: " + this.rlen);
             if (this.splitbyte < this.rlen) {
                 this.inputStream.reset();
                 this.inputStream.skip(this.splitbyte);
@@ -382,33 +391,42 @@ public class HTTPSession implements IHTTPSession {
             this.parms = new HashMap<String, List<String>>();
             if (null == this.headers) {
                 this.headers = new HashMap<String, String>();
-            } else {
-                this.headers.clear();
             }
-
-            // Create a BufferedReader for parsing the header.
-            BufferedReader hin = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(buf, 0, this.rlen)));
-
-            // Decode the header into parms and header java properties
-            Map<String, String> pre = new HashMap<String, String>();
-            decodeHeader(hin, pre, this.parms, this.headers);
+            if (this.splitbyte > 0) {
+                if (this.onContinue) {
+                    System.out.println("HTTPSession.execute() - 100-continue is done");
+                    // clear expect header
+                    this.headers.remove("expect");
+                } else {
+                    this.headers.clear();
+                    // Create a BufferedReader for parsing the header.
+                    BufferedReader hin = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(buf, 0, this.splitbyte)));
+                    // Decode the header into parms and header java properties
+                    Map<String, String> pre = new HashMap<String, String>();
+                    decodeHeader(hin, pre, this.parms, this.headers);
+                    this.method = Method.lookup(pre.get("method"));
+                    if (this.method == null) {
+                        System.err.println("BAD REQUEST: Syntax error. HTTP verb " + pre.get("method") + " unhandled.");
+                        throw new ResponseException(Status.BAD_REQUEST, "BAD REQUEST: Syntax error. HTTP verb " + pre.get("method") + " unhandled.");
+                    }
+                    this.uri = pre.get("uri");
+                    if (this.headers.containsKey("expect")) {
+                        this.onContinue = this.headers.get("expect").equalsIgnoreCase("100-continue");
+                        System.out.println("HTTPSession.execute() - 100-continue: " + this.onContinue);
+                    }
+                }
+            }
 
             if (null != this.remoteIp) {
                 this.headers.put("remote-addr", this.remoteIp);
                 this.headers.put("http-client-ip", this.remoteIp);
             }
-
-            this.method = Method.lookup(pre.get("method"));
-            if (this.method == null) {
-                throw new ResponseException(Status.BAD_REQUEST, "BAD REQUEST: Syntax error. HTTP verb " + pre.get("method") + " unhandled.");
-            }
-
-            this.uri = pre.get("uri");
-
             this.cookies = new CookieHandler(this.headers);
 
             String connection = this.headers.get("connection");
-            boolean keepAlive = "HTTP/1.1".equals(protocolVersion) && (connection == null || !connection.matches("(?i).*close.*"));
+            boolean keepAlive = true; // "HTTP/1.1".equals(protocolVersion) &&
+                                      // (connection == null ||
+                                      // !connection.matches("(?i).*close.*"));
 
             // Ok, now do the serve()
 
@@ -422,23 +440,17 @@ public class HTTPSession implements IHTTPSession {
             if (r == null) {
                 throw new ResponseException(Status.INTERNAL_ERROR, "SERVER INTERNAL ERROR: Serve() returned a null response.");
             } else {
-                String expecString = this.headers.get("expect");
-                if (expecString != null && "100-continue".equalsIgnoreCase(expecString)) {
-                    this.outputStream.write("HTTP/1.1 100 Continue\r\n".getBytes());
-                    System.out.println("Sent 100 Continue response.");
-                    this.outputStream.flush();
-                } else {
-                    String acceptEncoding = this.headers.get("accept-encoding");
-                    this.cookies.unloadQueue(r);
-                    r.setRequestMethod(this.method);
-                    if (acceptEncoding == null || !acceptEncoding.contains("gzip")) {
-                        r.setUseGzip(false);
-                    }
-                    r.setKeepAlive(keepAlive);
-                    r.send(this.outputStream);
+                String acceptEncoding = this.headers.get("accept-encoding");
+                this.cookies.unloadQueue(r);
+                r.setRequestMethod(this.method);
+                if (acceptEncoding == null || !acceptEncoding.contains("gzip")) {
+                    r.setUseGzip(false);
                 }
+                r.setKeepAlive(keepAlive);
+                r.send(this.outputStream);
             }
             if (!keepAlive || r.isCloseConnection()) {
+                System.err.println("Closing the socket, keep-alive=" + keepAlive);
                 throw new SocketException("NanoHttpd Shutdown");
             }
         } catch (SocketException e) {
@@ -481,9 +493,9 @@ public class HTTPSession implements IHTTPSession {
             }
 
             // tolerance
-            if (buf[splitbyte] == '\n' && buf[splitbyte + 1] == '\n') {
-                return splitbyte + 2;
-            }
+            // if (buf[splitbyte] == '\n' && buf[splitbyte + 1] == '\n') {
+            // return splitbyte + 2;
+            // }
             splitbyte++;
         }
         return 0;

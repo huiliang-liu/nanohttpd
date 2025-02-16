@@ -231,7 +231,8 @@ public class Response implements Closeable {
 
         try {
             if (this.status == null) {
-                throw new Error("sendResponse(): Status can't be null.");
+                // throw new Error("sendResponse(): Status can't be null.");
+                this.status = Status.CONTINUE;
             }
             PrintWriter pw = new PrintWriter(new BufferedWriter(new OutputStreamWriter(outputStream, new ContentType(this.mimeType).getEncoding())), false);
             pw.append("HTTP/1.1 ").append(this.status.getDescription()).append(" \r\n");

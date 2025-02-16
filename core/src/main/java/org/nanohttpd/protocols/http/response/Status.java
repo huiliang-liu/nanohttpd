@@ -37,6 +37,7 @@ package org.nanohttpd.protocols.http.response;
  * Some HTTP response status codes
  */
 public enum Status implements IStatus {
+    CONTINUE(100, "Continue"),
     SWITCH_PROTOCOL(101, "Switching Protocols"),
 
     OK(200, "OK"),
