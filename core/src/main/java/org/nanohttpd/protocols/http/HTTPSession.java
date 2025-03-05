@@ -378,9 +378,6 @@ public class HTTPSession implements IHTTPSession {
                 }
                 read = this.inputStream.read(buf, this.rlen, HTTPSession.BUFSIZE - this.rlen);
             }
-            if (onContinue) {
-                this.splitbyte = 0;
-            }
 
             System.out.println("HTTPSession.execute() - splitbyte: " + this.splitbyte + ", rlen: " + this.rlen);
             if (this.splitbyte < this.rlen && !this.onContinue) {
@@ -393,24 +390,29 @@ public class HTTPSession implements IHTTPSession {
                 this.headers = new HashMap<String, String>();
             }
             if (this.onContinue) {
-
+                if (this.splitbyte == this.rlen) {
+                    System.out.println("HTTPSession.execute() - 100-continue is done");
+                    this.headers.remove("expect");
+                }
+                this.inputStream.reset();
+                this.splitbyte = 0;
             } else if (this.splitbyte > 0) {
-                    this.headers.clear();
-                    // Create a BufferedReader for parsing the header.
-                    BufferedReader hin = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(buf, 0, this.splitbyte)));
-                    // Decode the header into parms and header java properties
-                    Map<String, String> pre = new HashMap<String, String>();
-                    decodeHeader(hin, pre, this.parms, this.headers);
-                    this.method = Method.lookup(pre.get("method"));
-                    if (this.method == null) {
-                        System.err.println("BAD REQUEST: Syntax error. HTTP verb " + pre.get("method") + " unhandled.");
-                        throw new ResponseException(Status.BAD_REQUEST, "BAD REQUEST: Syntax error. HTTP verb " + pre.get("method") + " unhandled.");
-                    }
-                    this.uri = pre.get("uri");
-                    if (this.headers.containsKey("expect")) {
-                        this.onContinue = this.headers.get("expect").equalsIgnoreCase("100-continue");
-                        System.out.println("HTTPSession.execute() - 100-continue: " + this.onContinue);
-                    }
+                this.headers.clear();
+                // Create a BufferedReader for parsing the header.
+                BufferedReader hin = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(buf, 0, this.splitbyte)));
+                // Decode the header into parms and header java properties
+                Map<String, String> pre = new HashMap<String, String>();
+                decodeHeader(hin, pre, this.parms, this.headers);
+                this.method = Method.lookup(pre.get("method"));
+                if (this.method == null) {
+                    System.err.println("BAD REQUEST: Syntax error. HTTP verb " + pre.get("method") + " unhandled.");
+                    throw new ResponseException(Status.BAD_REQUEST, "BAD REQUEST: Syntax error. HTTP verb " + pre.get("method") + " unhandled.");
+                }
+                this.uri = pre.get("uri");
+                if (this.headers.containsKey("expect")) {
+                    this.onContinue = this.headers.get("expect").equalsIgnoreCase("100-continue");
+                    System.out.println("HTTPSession.execute() - 100-continue: " + this.onContinue);
+                }
             }
 
             if (null != this.remoteIp) {
