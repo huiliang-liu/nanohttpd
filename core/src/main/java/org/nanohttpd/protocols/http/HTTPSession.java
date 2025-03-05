@@ -354,6 +354,23 @@ public class HTTPSession implements IHTTPSession {
 
             int read = -1;
             this.inputStream.mark(HTTPSession.BUFSIZE);
+            if (this.onContinue) {
+                r = httpd.handle(this);
+                r.send(this.outputStream);
+                System.out.println("HTTPSession.execute() - onContinue: read start ");
+                read = this.inputStream.read(buf, 0, HTTPSession.BUFSIZE);
+                System.out.println("HTTPSession.execute() - onContinue: read = " + read);
+                if (read == -1) {
+                    // socket was been closed
+                    NanoHTTPD.safeClose(this.inputStream);
+                    NanoHTTPD.safeClose(this.outputStream);
+                } else {
+                    this.inputStream.reset();
+                }
+                NanoHTTPD.safeClose(r);
+                this.tempFileManager.clear();
+                return;
+            }
             try {
                 read = this.inputStream.read(buf, 0, HTTPSession.BUFSIZE);
             } catch (SSLException e) {
@@ -393,8 +410,26 @@ public class HTTPSession implements IHTTPSession {
                 if (this.splitbyte == this.rlen) {
                     System.out.println("HTTPSession.execute() - 100-continue is done");
                     this.headers.remove("expect");
+                    this.inputStream.reset();
                 }
-                this.inputStream.reset();
+                byte[] bufSkip = new byte[64];
+                int len = this.inputStream.read(bufSkip);
+                for (byte b : bufSkip) {
+                    System.out.print(String.format("%02X ", b));
+                }
+                System.out.println();
+                String text = new String(bufSkip, 0, len);
+                String[] lines = text.split("\r\n");
+                int skipLen = 0;
+                for (int i = 0; i < lines.length - 1; i++) {
+                    skipLen += lines[i].length();
+                }
+                if (lines.length > 1) {
+                    skipLen += 2;
+                    System.out.println("total lines: " + lines.length + " skipLen: " + skipLen);
+                    this.inputStream.reset();
+                    this.inputStream.skip(skipLen);
+                }
                 this.splitbyte = 0;
             } else if (this.splitbyte > 0) {
                 this.headers.clear();
@@ -413,6 +448,10 @@ public class HTTPSession implements IHTTPSession {
                     this.onContinue = this.headers.get("expect").equalsIgnoreCase("100-continue");
                     System.out.println("HTTPSession.execute() - 100-continue: " + this.onContinue);
                 }
+                r = Response.newFixedLengthResponse("");
+                r.setStatus(null);
+                r.send(this.outputStream);
+                return;
             }
 
             if (null != this.remoteIp) {
