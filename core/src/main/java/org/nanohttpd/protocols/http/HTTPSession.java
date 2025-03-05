@@ -383,7 +383,7 @@ public class HTTPSession implements IHTTPSession {
             }
 
             System.out.println("HTTPSession.execute() - splitbyte: " + this.splitbyte + ", rlen: " + this.rlen);
-            if (this.splitbyte < this.rlen) {
+            if (this.splitbyte < this.rlen && !this.onContinue) {
                 this.inputStream.reset();
                 this.inputStream.skip(this.splitbyte);
             }
@@ -392,12 +392,9 @@ public class HTTPSession implements IHTTPSession {
             if (null == this.headers) {
                 this.headers = new HashMap<String, String>();
             }
-            if (this.splitbyte > 0) {
-                if (this.onContinue) {
-                    System.out.println("HTTPSession.execute() - 100-continue is done");
-                    // clear expect header
-                    this.headers.remove("expect");
-                } else {
+            if (this.onContinue) {
+
+            } else if (this.splitbyte > 0) {
                     this.headers.clear();
                     // Create a BufferedReader for parsing the header.
                     BufferedReader hin = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(buf, 0, this.splitbyte)));
@@ -414,7 +411,6 @@ public class HTTPSession implements IHTTPSession {
                         this.onContinue = this.headers.get("expect").equalsIgnoreCase("100-continue");
                         System.out.println("HTTPSession.execute() - 100-continue: " + this.onContinue);
                     }
-                }
             }
 
             if (null != this.remoteIp) {
