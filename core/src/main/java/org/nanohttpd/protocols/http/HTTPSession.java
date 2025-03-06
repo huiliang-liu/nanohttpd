@@ -358,6 +358,7 @@ public class HTTPSession implements IHTTPSession {
                 r = httpd.handle(this);
                 r.send(this.outputStream);
                 System.out.println("HTTPSession.execute() - onContinue: read start ");
+                this.inputStream.mark(HTTPSession.BUFSIZE);
                 read = this.inputStream.read(buf, 0, HTTPSession.BUFSIZE);
                 System.out.println("HTTPSession.execute() - onContinue: read = " + read);
                 if (read == -1) {
