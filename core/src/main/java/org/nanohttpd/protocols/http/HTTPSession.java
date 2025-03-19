@@ -422,6 +422,15 @@ public class HTTPSession implements IHTTPSession {
             if (r == null) {
                 throw new ResponseException(Status.INTERNAL_ERROR, "SERVER INTERNAL ERROR: Serve() returned a null response.");
             } else {
+                if (this.headers.containsKey("expect")) {
+                    boolean onContinue = this.headers.get("expect").equalsIgnoreCase("100-continue");
+                    if (onContinue) {
+                        this.outputStream.write("HTTP/1.1 100 Continue\n".getBytes());
+                        this.outputStream.write("\r\n".getBytes());
+                        this.outputStream.flush();
+                        r = httpd.handle(this);
+                    }
+                }
                 String acceptEncoding = this.headers.get("accept-encoding");
                 this.cookies.unloadQueue(r);
                 r.setRequestMethod(this.method);
